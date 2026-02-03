@@ -1,8 +1,48 @@
-# **OPNsense Firewall: Installation & Configuration + VPN**
+# **OPNsense Firewall: Production Deployment Case Study (DHCP + VPN)**
 
 ## **Project Overview**
 
-This project demonstrates the installation and configuration of OPNsense firewall on bare-metal hardware as a production environment entry point, functioning as both a DHCP server and VPN access gateway for secure server infrastructure management. [docs.opnsense](https://docs.opnsense.org/manual/install.html)
+This case study documents a production-style deployment of the OPNsense firewall on bare-metal hardware, acting as the secure entry point to a private infrastructure. The appliance terminates WAN traffic, provides DHCP services for the LAN, and exposes a WireGuard-based VPN for remote administration of internal servers. The focus is on designing a clean network baseline, making opinionated configuration choices, and validating that the environment is maintainable and observable over time. [OPNsense Documentation](https://docs.opnsense.org/manual/install.html)
+
+## **Case Study Summary**
+
+- **Scenario**: Deploy a dedicated OPNsense firewall to front a small production network, consolidating perimeter security, DHCP, and VPN access into a single hardened appliance.
+- **Constraints**: Bare-metal hardware with dual NICs, low idle power usage, and a simple /24 LAN segment to support servers, management devices, and end-user clients.
+- **Approach**: Use OPNsense with ZFS, Intel NICs, Dnsmasq for integrated DHCP, and WireGuard for modern, low-overhead VPN access. Document all steps and decisions as an operator runbook.
+- **Outcome**: A reproducible configuration that delivers stable LAN connectivity, controlled static mappings for critical hosts, and secure remote access into the LAN over VPN, backed by regular backups and monitoring.
+
+## **Architecture Overview**
+
+At a high level, the deployment places OPNsense between the ISP-provided WAN and an internal LAN, with DHCP-managed clients on the LAN and WireGuard VPN clients joining via a dedicated tunnel subnet.
+
+```mermaid
+flowchart LR
+  wan[\"WAN / Internet\"]
+  opnsense[\"OPNsense Firewall\"]
+  lan[\"LAN Switch & Clients (192.168.1.0/24)\"]
+  vpnClients[\"WireGuard VPN Clients (10.10.10.0/24)\"]
+
+  wan --> opnsense
+  vpnClients --- opnsense
+  opnsense --> lan
+```
+
+Key design elements:
+
+- **WAN**: DHCP or static from ISP, terminated on OPNsense WAN interface.
+- **LAN**: `192.168.1.0/24` with OPNsense at `192.168.1.1`, serving as default gateway and DNS for clients.
+- **DHCP**: Dynamic range `192.168.1.100–192.168.1.200`, with static mappings reserved below `.100` for servers and infrastructure.
+- **VPN**: WireGuard tunnel network `10.10.10.0/24`, with clients allowed to reach select LAN subnets.
+
+## **Skills Demonstrated**
+
+✓ Network infrastructure design and implementation (WAN/LAN segmentation, DHCP ranges, static mappings)  
+✓ Firewall configuration and security hardening for a production-style perimeter device  
+✓ DHCP server management and IP allocation using Dnsmasq on OPNsense 25.x  
+✓ VPN deployment for secure remote access (WireGuard road-warrior setup into LAN resources)  
+✓ Production environment best practices (backups, updates, monitoring, logging)  
+✓ Technical documentation and knowledge transfer through a step-by-step operator runbook  
+✓ Troubleshooting and problem resolution for connectivity, DHCP, and VPN issues  
 
 ## **Objectives**
 
@@ -28,7 +68,9 @@ This project demonstrates the installation and configuration of OPNsense firewal
 
 ***
 
-## **Hardware Requirements**
+## **Technical Implementation**
+
+### **Hardware Requirements**
 
 ### **Minimum Specifications** (per [OPNsense documentation](https://docs.opnsense.org/manual/hardware.html)) [docs.opnsense](https://docs.opnsense.org/manual/hardware.html)
 
@@ -51,7 +93,7 @@ For production environments with VPN and DHCP services: [reddit](https://www.red
 
 ***
 
-## **Pre-Installation Preparation**
+### **Pre-Installation Preparation**
 
 ### **1. Download OPNsense ISO**
 
@@ -91,7 +133,9 @@ Document your network topology before installation:
 
 ***
 
-## **Installation Process**
+### **Installation Process**
+
+This section covers installing OPNsense onto bare-metal hardware using bootable media. The goal is to end up with a resilient base system (preferably using ZFS) that can support firewalling, DHCP, and VPN services without manual intervention after reboots.
 
 ### **Step 1: Boot from Installation Media**
 
@@ -149,7 +193,9 @@ Upon first boot, you'll see the console menu: [docs.opnsense](https://docs.opnse
 
 ***
 
-## **Initial Configuration**
+### **Initial Configuration**
+
+Here you bring the newly installed firewall onto the network by assigning IPs and enabling basic services. The objective is to establish a secure management plane on the LAN, with HTTPS access to the web GUI and a small initial DHCP scope for clients.
 
 ### **Step 1: Configure LAN Interface**
 
@@ -202,13 +248,11 @@ The web interface will launch a configuration wizard:
 
 ***
 
-Perfect! Here's the updated DHCP section using **Dnsmasq DNS & DHCP** for OPNsense 25.x:
-
 ***
 
-## **DHCP Configuration (Dnsmasq)**
+### **DHCP Configuration (Dnsmasq)**
 
-**Note**: OPNsense 25.x uses Dnsmasq as the default DHCP service, replacing the deprecated ISC DHCP. Dnsmasq provides integrated DNS and DHCP functionality with improved performance and modern features. [youtube](https://www.youtube.com/watch?v=fsbMvI7beeA)
+This section configures DHCP using the modern Dnsmasq service in OPNsense 25.x, replacing the legacy ISC DHCP daemon. The intent is to centralize IP address management, keep static infrastructure addresses predictable, and integrate DHCP with local DNS so hosts are easily discoverable.
 
 ### **Enable Dnsmasq Services**
 
@@ -384,7 +428,9 @@ You should see:
 
 ## **VPN Setup**
 
-### **WireGuard VPN Configuration** (Recommended) [youtube](https://www.youtube.com/watch?v=UI5tO1hP2q8)
+### **WireGuard VPN Configuration** (Recommended)
+
+WireGuard is used here as the primary remote access VPN because it is lightweight, easy to manage with key pairs, and performs well on modest hardware. The design follows a \"road-warrior\" pattern where individual clients receive a single /32 address in a dedicated VPN subnet and are allowed to access selected LAN networks.
 
 Navigate to: **VPN → WireGuard**
 
@@ -463,6 +509,8 @@ PersistentKeepalive = 25
 
 ### **Essential LAN Rules**
 
+Firewall rules control how LAN devices, VPN clients, and the firewall itself can communicate. The aim is to start with a simple, auditable baseline (LAN-to-any) and then tighten access over time using the principle of least privilege.
+
 Navigate to: **Firewall → Rules → LAN**
 
 #### **Default LAN to Any** (usually pre-configured):
@@ -482,7 +530,7 @@ Navigate to: **Firewall → Rules → LAN**
 
 ***
 
-## **Troubleshooting**
+### **Troubleshooting**
 
 ### **Cannot Access Web Interface**
 
@@ -508,16 +556,16 @@ Navigate to: **Firewall → Rules → LAN**
 ### **DHCP Not Assigning Addresses**
 
 1. Verify DHCP service is running:
-   - **Services → ISC DHCPv4** → Check enabled
+   - **Services → Dnsmasq DNS & DHCP → Settings** → Ensure **Enable Dnsmasq** is checked
 2. Restart DHCP service:
-   - **Services → ISC DHCPv4** → Restart service
+   - **Services → Dnsmasq DNS & DHCP → Settings** → Click **Apply** to restart
 3. Check DHCP leases:
-   - **Services → ISC DHCPv4 → Leases**
-4. Verify firewall rules allow DHCP (ports 67/68 UDP)
+   - **Services → Dnsmasq DNS & DHCP → Leases**
+4. Verify firewall rules allow DHCP (UDP ports 67/68) on the LAN interface
 
 ***
 
-## **Best Practices**
+### **Best Practices**
 
 ### **1. Regular Backups** [youtube](https://www.youtube.com/watch?v=UI5tO1hP2q8)
 
@@ -558,22 +606,16 @@ Navigate to: **Firewall → Rules → LAN**
 
 ## **Additional Resources**
 
-- [OPNsense Official Documentation](https://docs.opnsense.org/) [docs.opnsense](https://docs.opnsense.org/manual/install.html)
-- [OPNsense Hardware Guide](https://docs.opnsense.org/manual/hardware.html) [docs.opnsense](https://docs.opnsense.org/manual/hardware.html)
+### **Official Documentation**
+
+- [OPNsense Official Documentation](https://docs.opnsense.org/)
+- [OPNsense Hardware Guide](https://docs.opnsense.org/manual/hardware.html)
+
+### **Community Guides & Videos**
+
 - [OPNsense Forum](https://forum.opnsense.org/)
-- [DHCP Configuration Guide](https://www.zenarmor.com/docs/network-security-tutorials/how-to-setup-dhcp-server-on-opnsense) [zenarmor](https://www.zenarmor.com/docs/network-security-tutorials/how-to-setup-dhcp-server-on-opnsense)
+- DHCP and DNSmasq deep dive: [How to set up DHCP server on OPNsense (Zenarmor)](https://www.zenarmor.com/docs/network-security-tutorials/how-to-setup-dhcp-server-on-opnsense)
 
-***
-
-## **Skills Demonstrated**
-
-✓ Network infrastructure design and implementation  
-✓ Firewall configuration and security hardening  
-✓ DHCP server management and IP allocation  
-✓ VPN deployment for secure remote access  
-✓ Production environment best practices  
-✓ Technical documentation and knowledge transfer  
-✓ Troubleshooting and problem resolution  
 
 ***
 
