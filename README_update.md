@@ -17,10 +17,10 @@ At a high level, the deployment places OPNsense between the ISP-provided WAN and
 
 ```mermaid
 flowchart LR
-  wan[\"WAN / Internet\"]
-  opnsense[\"OPNsense Firewall\"]
-  lan[\"LAN Switch & Clients (192.168.1.0/24)\"]
-  vpnClients[\"WireGuard VPN Clients (10.10.10.0/24)\"]
+  wan["WAN / Internet"]
+  opnsense["OPNsense Firewall"]
+  lan["Server/Host & Clients"]
+  vpnClients["WireGuard VPN Clients"]
 
   wan --> opnsense
   vpnClients --- opnsense
@@ -618,5 +618,6 @@ Navigate to: **Firewall → Rules → LAN**
 
 
 ***
+
 
 **Author**: Craig Sheffield (ideafieldpro)  
